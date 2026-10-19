@@ -1,5 +1,5 @@
 {
-  "name": "PlanningVoyage",
+  "name": "planningvoyage",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -38,5 +38,18 @@
   },
   "engines": {
     "node": ">= 22.11.0"
-  }
+  },
+  "description": "This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/narny14/PlanningVoyage.git"
+  },
+  "bugs": {
+    "url": "https://github.com/narny14/PlanningVoyage/issues"
+  },
+  "homepage": "https://github.com/narny14/PlanningVoyage#readme"
 }
