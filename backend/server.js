@@ -174,13 +174,16 @@ app.post('/api/me/device-token', authenticate, async (req, res) => {
 });
 
 app.get('/api/me/trips', authenticate, async (req, res) => {
+  // Privacy + business rule: return every past trip and ONLY the nearest upcoming trip.
   const [rows] = await pool.execute(
-    "SELECT id,departure_date AS departureDate,departure_city AS departureCity,destination,arrival_date AS arrivalDate,arrival_city AS arrivalCity,reference_code AS referenceCode,transport,notes,status FROM trips WHERE user_id=? AND status<>'cancelled' AND (departure_date >= CURDATE() OR departure_date < CURDATE()) ORDER BY departure_date ASC",
-    [req.auth.sub]
+    "SELECT id,departure_date AS departureDate,departure_city AS departureCity,destination,arrival_date AS arrivalDate,arrival_city AS arrivalCity,reference_code AS referenceCode,transport,notes,status FROM trips WHERE user_id=? AND status<>'cancelled' AND (departure_date < CURDATE() OR id=(SELECT id FROM trips WHERE user_id=? AND status<>'cancelled' AND departure_date >= CURDATE() ORDER BY departure_date ASC,id ASC LIMIT 1)) ORDER BY departure_date ASC",
+    [req.auth.sub, req.auth.sub]
   );
-  const next = rows.find(t => t.departureDate >= new Date().toISOString().slice(0,10)) || null;
-  const past = rows.filter(t => t.departureDate < new Date().toISOString().slice(0,10)).sort((a,b) => b.departureDate.localeCompare(a.departureDate));
-  res.json({ nextTrip: next, pastTrips: past, trips: rows });
+  const [todayRows] = await pool.query('SELECT CURDATE() AS today');
+  const today = String(todayRows[0].today).slice(0,10);
+  const next = rows.find(t => String(t.departureDate) >= today) || null;
+  const past = rows.filter(t => String(t.departureDate) < today).sort((a,b) => String(b.departureDate).localeCompare(String(a.departureDate)));
+  res.json({ nextTrip: next, pastTrips: past, trips: [...past, ...(next ? [next] : [])] });
 });
 
 app.get('/api/me/history.pdf', authenticate, async (req, res) => {
