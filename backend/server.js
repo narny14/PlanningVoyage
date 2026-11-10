@@ -100,7 +100,7 @@ async function pushToUser(userId, title, body, data = {}) {
     tokens: rows.map(row => row.token),
     notification: { title, body },
     data: Object.fromEntries(Object.entries(data).map(([k,v]) => [k, String(v)])),
-    android: { priority: 'high', notification: { channelId: 'planningvoyage' } }
+    android: { priority: 'high' }
   });
   const invalidCodes = ['messaging/invalid-registration-token','messaging/registration-token-not-registered'];
   for (let i = 0; i < result.responses.length; i++) {
@@ -188,7 +188,7 @@ app.get('/api/me/trips', authenticate, async (req, res) => {
 
 app.get('/api/me/history.pdf', authenticate, async (req, res) => {
   const [rows] = await pool.execute(
-    "SELECT departure_date,departure_city,destination,arrival_date,arrival_city,reference_code,status FROM trips WHERE user_id=? AND status<>'cancelled' ORDER BY departure_date DESC",
+    "SELECT departure_date,departure_city,destination,arrival_date,arrival_city,reference_code,status FROM trips WHERE user_id=? AND status<>'cancelled' AND (departure_date < CURDATE() OR status='completed') ORDER BY departure_date DESC",
     [req.auth.sub]
   );
   const [users] = await pool.execute('SELECT full_name FROM users WHERE id=?', [req.auth.sub]);
@@ -307,13 +307,28 @@ app.put('/api/admin/trips/:id', authenticate, requireAdmin, async (req, res) => 
       (arrivalDate && (!validDate(arrivalDate) || arrivalDate < departureDate))) {
     return res.status(400).json({ message: 'Informations de voyage invalides.' });
   }
-  const [result] = await pool.execute(
+  const [existing] = await pool.execute('SELECT user_id FROM trips WHERE id=?', [id]);
+  if (!existing.length) return res.status(404).json({ message: 'Voyage introuvable.' });
+  const userId = existing[0].user_id;
+  await pool.execute(
     'UPDATE trips SET departure_date=?,departure_city=?,destination=?,arrival_date=?,arrival_city=?,reference_code=?,transport=?,notes=?,status=? WHERE id=?',
     [departureDate,departureCity,destination,arrivalDate,req.body.arrivalCity || null,req.body.referenceCode || null,req.body.transport || null,req.body.notes || null,['planned','confirmed','completed','cancelled'].includes(req.body.status) ? req.body.status : 'planned',id]
   );
-  if (!result.affectedRows) return res.status(404).json({ message: 'Voyage introuvable.' });
-  await audit(req.auth.sub, 'trip_updated', 'trip', id);
-  res.json({ message: 'Voyage mis à jour.' });
+  await audit(req.auth.sub, 'trip_updated', 'trip', id, { userId });
+  const title = 'Mise à jour de votre voyage';
+  const body = 'Votre voyage du ' + departureDate + ' de ' + departureCity + ' vers ' + destination + ' a été mis à jour.';
+  const [notice] = await pool.execute(
+    'INSERT INTO notifications (user_id,title,body,data_json,sent_by) VALUES (?,?,?,?,?)',
+    [userId,title,body,JSON.stringify({ tripId: id }),req.auth.sub]
+  );
+  try {
+    const delivery = await pushToUser(userId,title,body,{ type: 'trip_updated', tripId: id });
+    await pool.execute('UPDATE notifications SET delivery_status=? WHERE id=?', [delivery.sent ? 'sent' : 'queued', notice.insertId]);
+  } catch (error) {
+    console.error('FCM update error:', error.message);
+    await pool.execute("UPDATE notifications SET delivery_status='failed' WHERE id=?", [notice.insertId]);
+  }
+  res.json({ message: 'Voyage mis à jour et notification créée.' });
 });
 
 app.get('/api/admin/trips', authenticate, requireAdmin, async (req, res) => {
