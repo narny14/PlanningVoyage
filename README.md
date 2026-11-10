@@ -1,98 +1,60 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
-
-# Getting Started
-
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
-
-## Step 1: Start Metro
-
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
-
-To start the Metro dev server, run the following command from the root of your React Native project:
-
-```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
-```
-
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
-```
-
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
 # PlanningVoyage
+
+Système de gestion des déplacements d'un bureau : application Android personnelle, portail Web administrateur et API Node.js/MySQL.
+
+## Fonctionnement
+1. Le voyageur communique ses dates au bureau hors application (téléphone, email ou en personne).
+2. L'administrateur crée le compte voyageur et enregistre le déplacement depuis `admin/index.html`.
+3. L'API conserve les informations dans MySQL et crée une notification liée à ce voyageur.
+4. Firebase Cloud Messaging envoie le push uniquement aux appareils enregistrés sur ce compte.
+5. L'application Android affiche l'historique passé et le prochain voyage, les notifications et le PDF personnel.
+
+## Structure
+- `App.js` : interface Android complète dans un seul fichier JavaScript.
+- `admin/index.html` : portail Web administrateur autonome (HTML/CSS/JS dans un fichier).
+- `backend/server.js` : API Node.js, JWT, MySQL, Firebase Messaging, PDF.
+- `backend/create-admin.js` : création du premier administrateur.
+- `backend/.env.example` : modèle des variables serveur.
+- `database/schema.sql` : schéma MySQL.
+
+## Démarrage du backend
+Consultez [backend/README.md](backend/README.md). En bref :
+```powershell
+cd backend
+npm install
+Copy-Item .env.example .env
+# Compléter .env, importer database/schema.sql depuis la racine du dépôt
+npm run create-admin
+npm run dev
+```
+
+## Android
+1. Dans Firebase Console, créez un projet Firebase et ajoutez une application Android avec l'identifiant `com.planningvoyage`.
+2. Téléchargez `google-services.json` et placez-le dans `android/app/google-services.json`. Ne publiez jamais ce fichier dans un dépôt public.
+3. Dans `App.js`, remplacez `API_BASE_URL` par l'URL HTTPS de votre API en production. Pour l'émulateur Android local, `http://10.0.2.2:5000/api` pointe vers le PC.
+4. Installez les dépendances :
+```powershell
+npm install
+```
+5. Compilez après configuration Firebase :
+```powershell
+cd android
+.\\gradlew clean
+.\\gradlew assembleDebug
+```
+
+Pour un téléphone physique en développement, utilisez l'adresse IP LAN du PC au lieu de `10.0.2.2`. En production, utilisez obligatoirement HTTPS. Configurez également une vraie clé de signature Android avant toute publication Play Store.
+
+## Portail Web administrateur
+Déployez `admin/index.html` sur un hébergement HTTPS. Dans l'écran de connexion, indiquez l'URL de l'API terminant par `/api`. Définissez `CORS_ORIGIN` dans le backend avec l'origine exacte du portail.
+
+## Sécurité
+- Les mots de passe sont stockés sous forme de hash bcrypt.
+- Les sessions utilisent JWT.
+- Les routes d'administration vérifient le rôle admin.
+- Les routes voyageur dérivent l'identifiant du compte depuis le JWT ; l'application ne peut pas choisir l'identifiant d'un autre voyageur.
+- Les secrets Firebase, MySQL et JWT restent uniquement dans le fichier `.env` du serveur et ne doivent jamais être commités.
+- Le compte administrateur initial est créé par le script CLI, pas par une valeur codée en dur.
+
+## État
+La base du serveur, le schéma SQL, l'interface Android initiale et le portail Web administrateur sont ajoutés. Il reste à configurer les identifiants Firebase/MySQL, l'URL réelle de l'API, puis à tester sur un appareil Android et sur l'hébergement cible.
