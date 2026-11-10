@@ -17,7 +17,7 @@
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-firebase/app": "^23.5.0",
     "@react-native-firebase/messaging": "^23.5.0",
-    "react-native-blob-util": "^0.23.2"
+    "react-native-blob-util": "^0.25.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
