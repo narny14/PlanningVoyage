@@ -362,7 +362,7 @@ export default function App() {
               <>
                 <Text style={styles.pageTitle}>Mon planning</Text>
                 <Text style={styles.muted}>Votre prochain voyage et les déplacements déjà effectués.</Text>
-                {trips.length ? trips.slice().sort((a,b) => String(b.departureDate).localeCompare(String(a.departureDate))).map(item => <TripCard key={String(item.id)} item={item} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>Aucun voyage</Text><Text style={styles.muted}>Aucun déplacement n'est encore enregistré dans votre compte.</Text></View>}
+                {trips.length ? [...trips].sort((a,b) => String(b.departureDate).localeCompare(String(a.departureDate))).map(item => <TripCard key={String(item.id)} item={item} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>Aucun voyage</Text><Text style={styles.muted}>Aucun déplacement n'est encore enregistré dans votre compte.</Text></View>}
               </>
             )}
 
