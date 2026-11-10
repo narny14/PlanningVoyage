@@ -73,3 +73,14 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Node / React Native
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+*.keystore
+*.jks
+android/app/google-services.json
+backend/.env
+.env
+.DS_Store
