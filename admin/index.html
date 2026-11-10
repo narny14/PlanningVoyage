@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PlanningVoyage — Administration</title>
+<style>
+:root{font-family:Inter,system-ui,Arial,sans-serif;color:#182b45;background:#f2f6fc;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0}.hidden{display:none!important}
+header{background:#142b4a;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+header h1{font-size:20px;margin:0}header small{color:#c9d9ee}
+main{max-width:1200px;margin:24px auto;padding:0 16px}
+.card{background:#fff;border:1px solid #e2eaf3;border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:0 3px 12px #142b4a0a}
+.login{max-width:430px;margin:9vh auto}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+h2{font-size:18px;margin:0 0 16px;color:#142b4a}label{display:block;font-size:13px;font-weight:700;margin:11px 0 6px}
+input,select,textarea{width:100%;padding:11px;border:1px solid #ccd7e5;border-radius:8px;font:inherit;color:#182b45;background:#fff}
+textarea{min-height:90px;resize:vertical}button{border:0;border-radius:8px;background:#246bce;color:#fff;padding:11px 16px;font-weight:750;cursor:pointer;margin-top:14px}
+button.secondary{background:#eaf2ff;color:#1d5db1}button.danger{background:#a83232}.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.message{padding:10px 12px;border-radius:8px;background:#eef5ff;color:#164d91;margin:12px 0;font-size:13px}
+.error{background:#fff0f0;color:#a12a2a}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.tabs button{margin:0;background:#e5edf8;color:#24415f}.tabs button.active{background:#246bce;color:white}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:10px;border-bottom:1px solid #e7edf5;vertical-align:top}th{color:#52657c;background:#f8faff}
+.tablewrap{overflow:auto}.muted{color:#68788d;font-size:13px}.stat{font-size:25px;font-weight:850;color:#246bce}
+@media(max-width:760px){.grid{grid-template-columns:1fr}header{padding:15px}main{margin:14px auto}.card{padding:15px}}
+</style>
+</head>
+<body>
+<header><div><h1>PlanningVoyage</h1><small>Portail d'administration du bureau</small></div><button id="logout" class="danger hidden">Déconnexion</button></header>
+<main>
+<section id="loginPanel" class="card login">
+<h2>Connexion administrateur</h2>
+<label>Adresse API</label><input id="apiBase" value="https://VOTRE-DOMAINE/api" placeholder="https://votre-domaine/api">
+<label>Email</label><input id="loginEmail" type="email" autocomplete="username">
+<label>Mot de passe</label><input id="loginPassword" type="password" autocomplete="current-password">
+<div id="loginMessage" class="message hidden"></div><button id="loginButton">Se connecter</button>
+<p class="muted">Le compte administrateur est créé par le script sécurisé du serveur.</p>
+</section>
+
+<section id="dashboard" class="hidden">
+<div class="card"><div class="stat" id="travelerCount">0</div><div class="muted">Voyageurs enregistrés</div></div>
+<nav class="tabs">
+<button class="active" data-tab="travelers">Voyageurs</button>
+<button data-tab="schedule">Programmer un voyage</button>
+<button data-tab="notifications">Notification privée</button>
+<button data-tab="trips">Planning général</button>
+</nav>
+<section id="tab-travelers" class="card tabContent">
+<h2>Créer un compte voyageur</h2>
+<div class="grid">
+<div><label>Nom complet</label><input id="travelerName" placeholder="Nom et prénom"></div>
+<div><label>Email</label><input id="travelerEmail" type="email" placeholder="voyageur@exemple.com"></div>
+<div><label>Téléphone (facultatif)</label><input id="travelerPhone"></div>
+<div><label>Mot de passe initial (12 caractères minimum)</label><input id="travelerPassword" type="password"></div>
+</div><button id="createTraveler">Créer le compte</button><div id="travelerMessage" class="message hidden"></div>
+<h2 style="margin-top:28px">Liste des voyageurs</h2><div class="tablewrap"><table><thead><tr><th>Nom</th><th>Email</th><th>Téléphone</th><th>Statut</th></tr></thead><tbody id="travelersRows"></tbody></table></div>
+</section>
+
+<section id="tab-schedule" class="card tabContent hidden">
+<h2>Enregistrer un voyage</h2>
+<label>Voyageur</label><select id="tripUser"></select>
+<div class="grid">
+<div><label>Date de départ</label><input id="departureDate" type="date"></div>
+<div><label>Ville de départ</label><input id="departureCity" placeholder="Ex. Kinshasa"></div>
+<div><label>Destination</label><input id="destination" placeholder="Ex. Lubumbashi"></div>
+<div><label>Date d'arrivée</label><input id="arrivalDate" type="date"></div>
+<div><label>Ville d'arrivée (facultatif)</label><input id="arrivalCity"></div>
+<div><label>Référence (facultatif)</label><input id="referenceCode"></div>
+<div><label>Transport (facultatif)</label><input id="transport"></div>
+<div><label>Statut</label><select id="tripStatus"><option value="planned">Programmé</option><option value="confirmed">Confirmé</option><option value="completed">Terminé</option></select></div>
+</div>
+<label>Notes (facultatif)</label><textarea id="tripNotes"></textarea>
+<button id="createTrip">Enregistrer le voyage et notifier le voyageur</button><div id="tripMessage" class="message hidden"></div>
+<p class="muted">L'enregistrement crée aussi une notification privée. Le serveur tente ensuite l'envoi Firebase au(x) appareil(s) de ce compte.</p>
+</section>
+
+<section id="tab-notifications" class="card tabContent hidden">
+<h2>Envoyer une notification privée</h2>
+<label>Destinataire</label><select id="noticeUser"></select>
+<label>Titre</label><input id="noticeTitle" maxlength="180" placeholder="Information concernant votre voyage">
+<label>Message</label><textarea id="noticeBody" placeholder="Votre message personnel..."></textarea>
+<button id="sendNotice">Envoyer la notification</button><div id="noticeMessage" class="message hidden"></div>
+</section>
+
+<section id="tab-trips" class="card tabContent hidden">
+<div class="actions" style="justify-content:space-between"><h2>Planning général des voyages</h2><button id="refreshTrips" class="secondary">Actualiser</button></div>
+<div class="tablewrap"><table><thead><tr><th>Voyageur</th><th>Départ</th><th>Ville</th><th>Destination</th><th>Arrivée</th><th>Statut</th></tr></thead><tbody id="tripsRows"></tbody></table></div>
+</section>
+</section>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let apiBase = localStorage.getItem('pv_api') || $('apiBase').value;
+  let token = sessionStorage.getItem('pv_admin_token') || '';
+  let travelers = [];
+  const showMessage = (id, text, error=false) => {
+    const el=$(id); el.textContent=text; el.classList.remove('hidden','error');
+    if(error) el.classList.add('error');
+  };
+  const request = async (path, options={}) => {
+    const response = await fetch(apiBase.replace(/\/$/,'')+path,{
+      ...options,
+      headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...(options.headers||{})}
+    });
+    const type=response.headers.get('content-type')||'';
+    const data=type.includes('application/json')?await response.json():null;
+    if(!response.ok) throw new Error(data?.message||'Erreur HTTP '+response.status);
+    return data;
+  };
+  const login = async () => {
+    apiBase=$('apiBase').value.trim().replace(/\/$/,'');
+    localStorage.setItem('pv_api',apiBase);
+    try{
+      const data=await request('/auth/login',{method:'POST',headers:{},body:JSON.stringify({email:$('loginEmail').value,password:$('loginPassword').value})});
+      if(data.user.role!=='admin') throw new Error('Ce compte ne possède pas le rôle administrateur.');
+      token=data.token; sessionStorage.setItem('pv_admin_token',token);
+      $('loginPanel').classList.add('hidden'); $('dashboard').classList.remove('hidden'); $('logout').classList.remove('hidden');
+      await loadTravelers(); await loadTrips();
+    }catch(e){showMessage('loginMessage',e.message,true);}
+  };
+  const loadTravelers = async () => {
+    travelers=await request('/admin/users');
+    $('travelerCount').textContent=travelers.length;
+    $('travelersRows').innerHTML=travelers.map(u=>'<tr><td>'+escapeHtml(u.fullName)+'</td><td>'+escapeHtml(u.email)+'</td><td>'+escapeHtml(u.phone||'—')+'</td><td>'+(u.isActive?'Actif':'Inactif')+'</td></tr>').join('');
+    const options='<option value="">Choisir un voyageur</option>'+travelers.map(u=>'<option value="'+u.id+'">'+escapeHtml(u.fullName)+' — '+escapeHtml(u.email)+'</option>').join('');
+    $('tripUser').innerHTML=options; $('noticeUser').innerHTML=options;
+  };
+  const loadTrips = async () => {
+    const trips=await request('/admin/trips');
+    $('tripsRows').innerHTML=trips.map(t=>'<tr><td>'+escapeHtml(t.travelerName)+'</td><td>'+escapeHtml(t.departureDate)+'</td><td>'+escapeHtml(t.departureCity)+'</td><td>'+escapeHtml(t.destination)+'</td><td>'+escapeHtml(t.arrivalDate||'—')+'</td><td>'+escapeHtml(t.status)+'</td></tr>').join('');
+  };
+  const escapeHtml = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  $('loginButton').addEventListener('click',login);
+  $('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+  $('logout').addEventListener('click',()=>{token='';sessionStorage.removeItem('pv_admin_token');location.reload();});
+  document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{
+    document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b===button));
+    document.querySelectorAll('.tabContent').forEach(panel=>panel.classList.toggle('hidden',panel.id!=='tab-'+button.dataset.tab));
+  }));
+  $('createTraveler').addEventListener('click',async()=>{
+    try{
+      const data=await request('/admin/users',{method:'POST',body:JSON.stringify({
+        fullName:$('travelerName').value,email:$('travelerEmail').value,phone:$('travelerPhone').value,password:$('travelerPassword').value
+      })});
+      showMessage('travelerMessage','Compte créé : '+data.email+'. Communiquez les identifiants au voyageur de manière sécurisée.');
+      ['travelerName','travelerEmail','travelerPhone','travelerPassword'].forEach(id=>$(id).value='');
+      await loadTravelers();
+    }catch(e){showMessage('travelerMessage',e.message,true);}
+  });
+  $('createTrip').addEventListener('click',async()=>{
+    try{
+      const data=await request('/admin/trips',{method:'POST',body:JSON.stringify({
+        userId:Number($('tripUser').value),departureDate:$('departureDate').value,departureCity:$('departureCity').value,
+        destination:$('destination').value,arrivalDate:$('arrivalDate').value||null,arrivalCity:$('arrivalCity').value,
+        referenceCode:$('referenceCode').value,transport:$('transport').value,notes:$('tripNotes').value,status:$('tripStatus').value
+      })});
+      showMessage('tripMessage','Voyage enregistré. Notification créée. Envoi push : '+(data.push?.sent?'réussi':data.push?.reason||'en attente de configuration Firebase')+'.');
+      await loadTrips();
+    }catch(e){showMessage('tripMessage',e.message,true);}
+  });
+  $('sendNotice').addEventListener('click',async()=>{
+    try{
+      const data=await request('/admin/notifications',{method:'POST',body:JSON.stringify({
+        userId:Number($('noticeUser').value),title:$('noticeTitle').value,body:$('noticeBody').value
+      })});
+      showMessage('noticeMessage','Notification enregistrée. Push : '+(data.push?.sent?'envoyé':data.push?.reason||'en attente')+'.');
+      $('noticeTitle').value='';$('noticeBody').value='';
+    }catch(e){showMessage('noticeMessage',e.message,true);}
+  });
+  $('refreshTrips').addEventListener('click',()=>loadTrips().catch(e=>alert(e.message)));
+  if(token){
+    $('apiBase').value=apiBase;
+    $('loginPanel').classList.add('hidden');$('dashboard').classList.remove('hidden');$('logout').classList.remove('hidden');
+    Promise.all([loadTravelers(),loadTrips()]).catch(()=>{token='';sessionStorage.removeItem('pv_admin_token');location.reload();});
+  }else{$('apiBase').value=apiBase;}
+})();
+</script>
+</body>
+</html>
