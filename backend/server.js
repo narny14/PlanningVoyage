@@ -8,7 +8,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const admin = require('firebase-admin');
 const PDFDocument = require('pdfkit');
-
+const { Buffer } = require('node:buffer');
 const app = express();
 app.disable('x-powered-by');
 app.use(helmet());
