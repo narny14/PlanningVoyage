@@ -6,6 +6,28 @@
   <meta name="theme-color" content="#173b6c">
   <title>PlanningVoyage — Administration</title>
   <link rel="stylesheet" href="styles.css">
+
+  <style>
+    .verification-list { display:grid; gap:16px; }
+    .verification-card { border:1px solid #e3eaf3; border-radius:14px; padding:18px; background:#fff; margin-top:12px; }
+    .verification-summary { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:14px; }
+    .verification-summary p { margin:6px 0; }
+    .verification-summary small { color:#667085; }
+    .verification-form { border-top:1px solid #e3eaf3; padding-top:14px; }
+    .verification-form .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .verification-form label { display:flex; flex-direction:column; gap:6px; }
+    .verification-form input,.verification-form select,.verification-form textarea { width:100%; box-sizing:border-box; }
+    .verification-form .full-width { grid-column:1/-1; }
+    .status-pending { background:#fff1d6; color:#a15c00; }
+    .status-boarded { background:#ddf6ea; color:#16865b; }
+    .status-not_boarded { background:#fde8e7; color:#c0392b; }
+    @media(max-width:700px) {
+      .verification-form .form-grid { grid-template-columns:1fr; }
+      .verification-form .full-width { grid-column:auto; }
+      .verification-summary { flex-direction:column; }
+    }
+  </style>
+
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -23,10 +45,8 @@
       </form>
       <details class="api-config">
         <summary>Configuration du serveur API</summary>
-        <label>URL de base de l'API
-          <input id="apiBaseInput" type="url" placeholder="https://votre-domaine.com">
-        </label>
-        <p class="hint">Saisissez uniquement l'origine du serveur, sans ajouter « /api ». Exemple : https://api.exemple.com</p>
+        <label>URL de base de l'API<input id="apiBaseInput" type="url" placeholder="https://votre-domaine.com"></label>
+        <p class="hint">Saisissez uniquement l'origine du serveur, sans ajouter « /api ».</p>
         <button id="saveApiBase" class="btn btn-light" type="button">Enregistrer l'adresse API</button>
       </details>
     </section>
@@ -38,7 +58,7 @@
       <nav class="nav-menu" aria-label="Navigation principale">
         <button class="nav-link active" data-section="dashboard">▦ <span>Tableau de bord</span></button>
         <button class="nav-link" data-section="travelers">♙ <span>Voyageurs</span></button>
-        <button class="nav-link" data-section="trips">▣ <span>Voyages</span></button>
+        <button class="nav-link" data-section="trips">▣ <span>Voyages et embarquements</span></button>
         <button class="nav-link" data-section="notifications">✉ <span>Notifications</span></button>
       </nav>
       <div class="sidebar-bottom">
@@ -52,20 +72,19 @@
         <div><p class="eyebrow">GESTION DES DÉPLACEMENTS</p><h1 id="pageTitle">Tableau de bord</h1></div>
         <div class="topbar-right"><span class="status-dot"></span><span>Connecté</span><button id="refreshButton" class="btn btn-light">↻ Actualiser</button></div>
       </header>
-
       <div id="globalMessage" class="global-message" role="status"></div>
 
       <section id="section-dashboard" class="page-section">
-        <div class="welcome-row"><div><h2>Vue d'ensemble</h2><p class="muted">Suivez les voyageurs et les déplacements enregistrés.</p></div><span id="todayLabel" class="date-label"></span></div>
+        <div class="welcome-row"><div><h2>Vue d'ensemble</h2><p class="muted">Suivez les voyageurs, les départs et les confirmations d'embarquement.</p></div><span id="todayLabel" class="date-label"></span></div>
         <div class="stats-grid">
           <article class="stat-card"><span class="stat-icon blue">♙</span><p>Voyageurs</p><strong id="statTravelers">—</strong><small>Comptes voyageurs</small></article>
           <article class="stat-card"><span class="stat-icon violet">▣</span><p>Voyages enregistrés</p><strong id="statTrips">—</strong><small>Tous statuts confondus</small></article>
-          <article class="stat-card"><span class="stat-icon green">✓</span><p>Confirmés</p><strong id="statConfirmed">—</strong><small>Voyages confirmés</small></article>
-          <article class="stat-card"><span class="stat-icon orange">◷</span><p>À venir</p><strong id="statUpcoming">—</strong><small>Départs à partir d'aujourd'hui</small></article>
+          <article class="stat-card"><span class="stat-icon green">✓</span><p>Embarquements confirmés</p><strong id="statConfirmed">—</strong><small>Confirmés par le bureau</small></article>
+          <article class="stat-card"><span class="stat-icon orange">◷</span><p>À venir</p><strong id="statUpcoming">—</strong><small>Départs futurs</small></article>
         </div>
         <div class="panel">
           <div class="panel-heading"><div><h2>Derniers voyages</h2><p class="muted">Les voyages les plus récemment programmés.</p></div><button class="text-button" data-go="trips">Voir tous les voyages →</button></div>
-          <div class="table-wrap"><table><thead><tr><th>Voyageur</th><th>Départ</th><th>Destination</th><th>Date</th><th>Statut</th></tr></thead><tbody id="recentTripsBody"><tr><td colspan="5" class="empty">Chargement des données…</td></tr></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Voyageur</th><th>Départ</th><th>Destination</th><th>Date</th><th>Statut du voyage</th><th>Embarquement</th></tr></thead><tbody id="recentTripsBody"><tr><td colspan="6" class="empty">Chargement des données…</td></tr></tbody></table></div>
         </div>
       </section>
 
@@ -78,7 +97,7 @@
             <label>Adresse e-mail<input name="email" type="email" required placeholder="voyageur@exemple.com"></label>
             <label>Téléphone <span class="optional">(facultatif)</span><input name="phone" type="tel" placeholder="+243…"></label>
             <label>Mot de passe initial<input name="password" type="password" minlength="12" required autocomplete="new-password" placeholder="12 caractères minimum"></label>
-            <p class="hint">Le voyageur devra modifier ce mot de passe lors de sa première connexion si l'application applique cette règle.</p>
+            <p class="hint">Le voyageur devra modifier ce mot de passe lors de sa première connexion.</p>
             <button class="btn btn-primary" type="submit">＋ Créer le compte</button>
             <p class="message" id="travelerMessage" role="status"></p>
           </form>
@@ -89,13 +108,19 @@
       </section>
 
       <section id="section-trips" class="page-section" hidden>
-        <div class="section-heading"><div><h2>Planning des voyages</h2><p class="muted">Programmez un déplacement ou mettez à jour un voyage existant.</p></div></div>
+        <div class="section-heading"><div><h2>Planning et vérification des embarquements</h2><p class="muted">Le statut du voyage ne prouve jamais que le voyageur est monté à bord.</p></div></div>
+
+        <div class="panel">
+          <div class="panel-heading"><div><h2>Voyages en attente de vérification</h2><p class="muted">Après consultation du rapport de vol, confirmez individuellement chaque voyageur.</p></div><span id="pendingVerificationCount" class="date-label">—</span></div>
+          <div id="pendingVerificationList" class="verification-list"><p class="empty">Chargement des vérifications…</p></div>
+        </div>
+
         <form id="tripForm" class="panel form-panel wide-form">
-          <div class="panel-heading"><div><h2 id="tripFormTitle">Programmer un voyage</h2><p class="muted">Une notification est créée automatiquement par l'API lors de la création ou modification.</p></div><button id="cancelEdit" class="btn btn-light" type="button" hidden>Annuler la modification</button></div>
+          <div class="panel-heading"><div><h2 id="tripFormTitle">Programmer un voyage</h2><p class="muted">Le statut décrit le planning, pas l'embarquement.</p></div><button id="cancelEdit" class="btn btn-light" type="button" hidden>Annuler la modification</button></div>
           <input type="hidden" name="tripId">
           <div class="form-grid">
             <label>Voyageur<select name="userId" id="tripTraveler" required><option value="">Sélectionner un voyageur</option></select></label>
-            <label>Statut<select name="status"><option value="planned">Planifié</option><option value="confirmed">Confirmé</option><option value="completed">Terminé</option><option value="cancelled">Annulé</option></select></label>
+            <label>Statut du voyage<select name="status"><option value="planned">Planifié</option><option value="confirmed">Confirmé</option><option value="cancelled">Annulé</option></select></label>
             <label>Date de départ<input name="departureDate" type="date" required></label>
             <label>Ville de départ<input name="departureCity" required maxlength="150" placeholder="Ex. Kinshasa"></label>
             <label>Destination<input name="destination" required maxlength="255" placeholder="Ex. Lubumbashi"></label>
@@ -107,8 +132,9 @@
           </div>
           <div class="form-actions"><button class="btn btn-primary" type="submit" id="tripSubmit">Enregistrer le voyage</button><p class="message" id="tripMessage" role="status"></p></div>
         </form>
-        <div class="panel"><div class="panel-heading"><div><h2>Tous les voyages</h2><p class="muted">Maximum retourné par le serveur : 1 000 voyages.</p></div><input id="tripSearch" class="search-input" type="search" placeholder="Voyageur, ville, destination…"></div>
-          <div class="table-wrap"><table><thead><tr><th>Voyageur</th><th>Départ</th><th>Destination</th><th>Date départ</th><th>Arrivée</th><th>Statut</th><th>Action</th></tr></thead><tbody id="tripsBody"><tr><td colspan="7" class="empty">Chargement…</td></tr></tbody></table></div>
+
+        <div class="panel"><div class="panel-heading"><div><h2>Tous les voyages</h2><p class="muted">Le statut d'embarquement est affiché séparément.</p></div><input id="tripSearch" class="search-input" type="search" placeholder="Voyageur, ville, destination…"></div>
+          <div class="table-wrap"><table><thead><tr><th>Voyageur</th><th>Départ</th><th>Destination</th><th>Date départ</th><th>Statut voyage</th><th>Embarquement</th><th>Action</th></tr></thead><tbody id="tripsBody"><tr><td colspan="7" class="empty">Chargement…</td></tr></tbody></table></div>
         </div>
       </section>
 
@@ -121,10 +147,9 @@
           <label>Message<textarea name="body" rows="5" required placeholder="Votre message au voyageur…"></textarea></label>
           <button class="btn btn-primary" type="submit">Envoyer la notification</button>
           <p id="notificationMessage" class="message" role="status"></p>
-          <p class="hint">L'API enregistre le message même si Firebase Push n'est pas encore configuré ou si l'appareil n'a pas de token actif.</p>
+          <p class="hint">Le message est enregistré même si Firebase Push n'est pas configuré.</p>
         </form>
       </section>
-
       <footer class="footer">PlanningVoyage · Portail d'administration sécurisé</footer>
     </main>
   </div>

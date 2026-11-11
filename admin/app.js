@@ -1,21 +1,25 @@
 'use strict';
 
-// Configurez l'URL de base dans l'écran de connexion.
-// Exemple : https://api.votre-domaine.com (sans /api à la fin).
 const DEFAULT_API_BASE = window.PLANNINGVOYAGE_API_URL || window.location.origin;
-
-const $ = (selector) => document.querySelector(selector);
-const state = { token: sessionStorage.getItem('pv_admin_token') || '', user: null, travelers: [], trips: [] };
+const $ = selector => document.querySelector(selector);
+const state = {
+  token: sessionStorage.getItem('pv_admin_token') || '',
+  user: null,
+  travelers: [],
+  trips: [],
+  pendingVerifications: []
+};
 
 function apiBase() {
   return (localStorage.getItem('pv_api_base') || DEFAULT_API_BASE).replace(/\/+$/, '');
 }
 function setMessage(element, message, success = false) {
+  if (!element) return;
   element.textContent = message || '';
   element.classList.toggle('success', !!success);
 }
 function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   })[char]);
 }
@@ -30,7 +34,7 @@ async function api(path, options = {}) {
   }
   const raw = await response.text();
   let data = null;
-  try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+  try { data = raw ? JSON.parse(raw) : null; } catch {}
   if (response.status === 401) {
     logout(false);
     throw new Error(data?.message || 'Session expirée. Veuillez vous reconnecter.');
@@ -53,16 +57,19 @@ function dateLabel(value) {
   const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('fr-FR');
 }
-function statusLabel(status) {
-  return ({ planned: 'Planifié', confirmed: 'Confirmé', completed: 'Terminé', cancelled: 'Annulé' })[status] || status || '—';
+function tripStatusLabel(status) {
+  return ({ planned: 'Planifié', confirmed: 'Confirmé', cancelled: 'Annulé' })[status] || status || '—';
 }
-function statusBadge(status) {
-  return `<span class="badge-status status-${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span>`;
+function boardingLabel(status) {
+  return ({ pending: 'En attente de vérification', boarded: 'Embarqué confirmé', not_boarded: 'Non embarqué' })[status] || 'À vérifier';
+}
+function badge(status, label) {
+  return `<span class="badge-status status-${escapeHtml(status || 'pending')}">${escapeHtml(label)}</span>`;
 }
 function switchSection(name) {
   document.querySelectorAll('.page-section').forEach(section => { section.hidden = section.id !== `section-${name}`; });
   document.querySelectorAll('.nav-link').forEach(button => button.classList.toggle('active', button.dataset.section === name));
-  $('#pageTitle').textContent = ({ dashboard: 'Tableau de bord', travelers: 'Voyageurs', trips: 'Planning des voyages', notifications: 'Notifications privées' })[name];
+  $('#pageTitle').textContent = ({ dashboard: 'Tableau de bord', travelers: 'Voyageurs', trips: 'Planning et embarquements', notifications: 'Notifications privées' })[name];
   clearGlobal();
 }
 function logout(showMessage = true) {
@@ -90,8 +97,42 @@ function renderTravelers() {
   $('#travelerCount').textContent = `${rows.length} voyageur(s)`;
   $('#travelersBody').innerHTML = rows.length ? rows.map(user => `
     <tr><td><strong>${escapeHtml(user.fullName)}</strong></td><td>${escapeHtml(user.email)}</td>
-    <td>${escapeHtml(user.phone || '—')}</td><td>${user.isActive ? '<span class="badge-status status-confirmed">Actif</span>' : '<span class="badge-status status-cancelled">Inactif</span>'}</td></tr>
+    <td>${escapeHtml(user.phone || '—')}</td><td>${user.isActive ? badge('confirmed', 'Actif') : badge('cancelled', 'Inactif')}</td></tr>
   `).join('') : '<tr><td colspan="4" class="empty">Aucun voyageur trouvé.</td></tr>';
+}
+function renderVerificationCard(trip) {
+  return `
+    <article class="verification-card">
+      <div class="verification-summary">
+        <div>
+          <strong>${escapeHtml(trip.travelerName || trip.fullName || 'Voyageur')}</strong>
+          <p>${escapeHtml(trip.departureCity || '—')} → ${escapeHtml(trip.destination || '—')} · Départ : ${dateLabel(trip.departureDate)}</p>
+          <small>${escapeHtml(trip.email || '')} · Voyage #${Number(trip.id)}</small>
+        </div>
+        ${badge('pending', 'En attente')}
+      </div>
+      <form class="verification-form" data-verify-trip="${Number(trip.id)}">
+        <div class="form-grid">
+          <label>Résultat de vérification<select name="boardingStatus" required><option value="boarded">Embarqué</option><option value="not_boarded">Non embarqué</option></select></label>
+          <label>Compagnie aérienne<input name="airline" maxlength="150" placeholder="Ex. Congo Airways"></label>
+          <label>Numéro de vol<input name="flightNumber" maxlength="80" placeholder="Ex. 8Z…"></label>
+          <label>Référence du rapport<input name="flightReportReference" maxlength="120" placeholder="Référence du rapport avion"></label>
+          <label>Date réelle de départ<input name="actualDepartureDate" type="date"></label>
+          <label>Date réelle d'arrivée<input name="actualArrivalDate" type="date"></label>
+          <label class="full-width">Observation<textarea name="observation" rows="2" placeholder="Détail facultatif basé sur le rapport consulté"></textarea></label>
+        </div>
+        <p class="hint">La validation est définitive dans le flux actuel : vérifiez le rapport de vol avant d'enregistrer.</p>
+        <button class="btn btn-primary" type="submit">Enregistrer la vérification</button>
+        <p class="message" role="status"></p>
+      </form>
+    </article>`;
+}
+function renderVerifications() {
+  const list = $('#pendingVerificationList');
+  $('#pendingVerificationCount').textContent = `${state.pendingVerifications.length} en attente`;
+  list.innerHTML = state.pendingVerifications.length
+    ? state.pendingVerifications.map(renderVerificationCard).join('')
+    : '<p class="empty">Aucun voyage en attente de vérification.</p>';
 }
 function renderTrips() {
   const query = $('#tripSearch').value.trim().toLowerCase();
@@ -99,28 +140,38 @@ function renderTrips() {
   $('#tripsBody').innerHTML = filtered.length ? filtered.map(trip => `
     <tr><td><strong>${escapeHtml(trip.travelerName)}</strong><br><small>${escapeHtml(trip.email)}</small></td>
     <td>${escapeHtml(trip.departureCity)}</td><td>${escapeHtml(trip.destination)}</td>
-    <td>${dateLabel(trip.departureDate)}</td><td>${dateLabel(trip.arrivalDate)}</td>
-    <td>${statusBadge(trip.status)}</td><td><button class="action-button" data-edit-trip="${Number(trip.id)}">Modifier</button></td></tr>
+    <td>${dateLabel(trip.departureDate)}</td><td>${badge(trip.status, tripStatusLabel(trip.status))}</td>
+    <td>${badge(trip.boardingStatus || 'pending', boardingLabel(trip.boardingStatus))}</td>
+    <td><button class="action-button" data-edit-trip="${Number(trip.id)}" ${trip.boardingStatus && trip.boardingStatus !== 'pending' ? 'disabled title="Voyage déjà vérifié"' : ''}>Modifier</button></td></tr>
   `).join('') : '<tr><td colspan="7" class="empty">Aucun voyage trouvé.</td></tr>';
   const recent = [...state.trips].sort((a,b) => String(b.departureDate).localeCompare(String(a.departureDate))).slice(0, 6);
   $('#recentTripsBody').innerHTML = recent.length ? recent.map(trip => `
     <tr><td>${escapeHtml(trip.travelerName)}</td><td>${escapeHtml(trip.departureCity)}</td>
-    <td>${escapeHtml(trip.destination)}</td><td>${dateLabel(trip.departureDate)}</td><td>${statusBadge(trip.status)}</td></tr>
-  `).join('') : '<tr><td colspan="5" class="empty">Aucun voyage enregistré.</td></tr>';
+    <td>${escapeHtml(trip.destination)}</td><td>${dateLabel(trip.departureDate)}</td>
+    <td>${badge(trip.status, tripStatusLabel(trip.status))}</td><td>${badge(trip.boardingStatus || 'pending', boardingLabel(trip.boardingStatus))}</td></tr>
+  `).join('') : '<tr><td colspan="6" class="empty">Aucun voyage enregistré.</td></tr>';
   $('#statTravelers').textContent = state.travelers.length;
   $('#statTrips').textContent = state.trips.length;
-  $('#statConfirmed').textContent = state.trips.filter(t => t.status === 'confirmed').length;
+  $('#statConfirmed').textContent = state.trips.filter(t => t.boardingStatus === 'boarded').length;
   const today = new Date(); today.setHours(0,0,0,0);
   $('#statUpcoming').textContent = state.trips.filter(t => t.status !== 'cancelled' && new Date(`${String(t.departureDate).slice(0,10)}T00:00:00`) >= today).length;
 }
 async function loadData() {
-  const [travelers, trips] = await Promise.all([api('/api/admin/users'), api('/api/admin/trips')]);
-  if (!Array.isArray(travelers) || !Array.isArray(trips)) throw new Error('Format de données inattendu depuis le serveur.');
+  const [travelers, trips, pending] = await Promise.all([
+    api('/api/admin/users'),
+    api('/api/admin/trips'),
+    api('/api/admin/trips/pending-verification')
+  ]);
+  if (!Array.isArray(travelers) || !Array.isArray(trips) || !Array.isArray(pending)) {
+    throw new Error('Format de données inattendu depuis le serveur.');
+  }
   state.travelers = travelers;
   state.trips = trips;
+  state.pendingVerifications = pending;
   renderTravelerOptions();
   renderTravelers();
   renderTrips();
+  renderVerifications();
 }
 async function enterApp(user) {
   if (user?.role !== 'admin') {
@@ -146,10 +197,10 @@ $('#saveApiBase').addEventListener('click', () => {
   localStorage.setItem('pv_api_base', value);
   setMessage($('#loginMessage'), 'Adresse API enregistrée.', true);
 });
-$('#loginForm').addEventListener('submit', async (event) => {
+$('#loginForm').addEventListener('submit', async event => {
   event.preventDefault();
   setMessage($('#loginMessage'), 'Connexion en cours…');
-  const button = event.submitter;
+  const button = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
   button.disabled = true;
   try {
     const result = await api('/api/auth/login', {
@@ -174,7 +225,7 @@ $('#refreshButton').addEventListener('click', async () => {
 $('#travelerSearch').addEventListener('input', renderTravelers);
 $('#tripSearch').addEventListener('input', renderTrips);
 
-$('#travelerForm').addEventListener('submit', async (event) => {
+$('#travelerForm').addEventListener('submit', async event => {
   event.preventDefault();
   const form = event.currentTarget;
   const values = Object.fromEntries(new FormData(form));
@@ -198,9 +249,9 @@ function resetTripForm() {
   $('#tripTraveler').disabled = false;
 }
 $('#cancelEdit').addEventListener('click', resetTripForm);
-$('#tripsBody').addEventListener('click', (event) => {
+$('#tripsBody').addEventListener('click', event => {
   const button = event.target.closest('[data-edit-trip]');
-  if (!button) return;
+  if (!button || button.disabled) return;
   const trip = state.trips.find(item => Number(item.id) === Number(button.dataset.editTrip));
   if (!trip) return;
   const form = $('#tripForm');
@@ -212,6 +263,9 @@ $('#tripsBody').addEventListener('click', (event) => {
   form.elements.destination.value = trip.destination || '';
   form.elements.arrivalDate.value = String(trip.arrivalDate || '').slice(0,10);
   form.elements.arrivalCity.value = trip.arrivalCity || '';
+  form.elements.referenceCode.value = trip.referenceCode || '';
+  form.elements.transport.value = trip.transport || '';
+  form.elements.notes.value = trip.notes || '';
   form.elements.status.value = trip.status || 'planned';
   $('#tripFormTitle').textContent = `Modifier le voyage #${trip.id}`;
   $('#tripSubmit').textContent = 'Enregistrer les modifications';
@@ -219,7 +273,7 @@ $('#tripsBody').addEventListener('click', (event) => {
   switchSection('trips');
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
-$('#tripForm').addEventListener('submit', async (event) => {
+$('#tripForm').addEventListener('submit', async event => {
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
@@ -232,17 +286,50 @@ $('#tripForm').addEventListener('submit', async (event) => {
   try {
     if (tripId) {
       await api(`/api/admin/trips/${encodeURIComponent(tripId)}`, { method: 'PUT', body: JSON.stringify(data) });
-      setMessage(message, 'Voyage mis à jour. Une notification a été créée.', true);
+      setMessage(message, 'Voyage mis à jour.', true);
     } else {
       await api('/api/admin/trips', { method: 'POST', body: JSON.stringify(data) });
-      setMessage(message, 'Voyage créé. Une notification a été créée.', true);
+      setMessage(message, 'Voyage créé.', true);
     }
     resetTripForm();
     await loadData();
   } catch (error) { setMessage(message, error.message); }
   finally { $('#tripSubmit').disabled = false; }
 });
-$('#notificationForm').addEventListener('submit', async (event) => {
+
+// Vérification individuelle : uniquement après consultation du rapport de vol.
+$('#pendingVerificationList').addEventListener('submit', async event => {
+  const form = event.target.closest('[data-verify-trip]');
+  if (!form) return;
+  event.preventDefault();
+  const tripId = form.dataset.verifyTrip;
+  const button = form.querySelector('button[type="submit"]');
+  const message = form.querySelector('.message');
+  const data = Object.fromEntries(new FormData(form));
+  for (const key of ['airline','flightNumber','flightReportReference','actualDepartureDate','actualArrivalDate','observation']) {
+    if (!data[key]) delete data[key];
+  }
+  if (data.actualDepartureDate && data.actualArrivalDate && data.actualArrivalDate < data.actualDepartureDate) {
+    setMessage(message, "La date d'arrivée ne peut pas précéder la date de départ.");
+    return;
+  }
+  if (!window.confirm(`Confirmer le résultat « ${data.boardingStatus === 'boarded' ? 'Embarqué' : 'Non embarqué'} » pour ce voyageur ?`)) return;
+  button.disabled = true;
+  setMessage(message, 'Enregistrement de la vérification…');
+  try {
+    await api(`/api/admin/trips/${encodeURIComponent(tripId)}/verify`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    await loadData();
+    showGlobal('Vérification enregistrée. Le résultat est maintenant visible dans le dossier du voyageur.');
+  } catch (error) {
+    setMessage(message, error.message);
+    button.disabled = false;
+  }
+});
+
+$('#notificationForm').addEventListener('submit', async event => {
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
@@ -259,7 +346,6 @@ $('#notificationForm').addEventListener('submit', async (event) => {
   finally { button.disabled = false; }
 });
 
-// Reuse a session token only after validating it with the protected /api/me route.
 (async function restoreSession() {
   if (!state.token) return;
   try {
