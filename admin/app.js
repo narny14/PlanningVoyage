@@ -102,7 +102,7 @@ function renderTravelers() {
 }
 function renderVerificationCard(trip) {
   return `
-    <article class="verification-card">
+    <article class="verification-card" id="verification-${Number(trip.id)}">
       <div class="verification-summary">
         <div>
           <strong>${escapeHtml(trip.travelerName || trip.fullName || 'Voyageur')}</strong>
@@ -134,28 +134,162 @@ function renderVerifications() {
     ? state.pendingVerifications.map(renderVerificationCard).join('')
     : '<p class="empty">Aucun voyage en attente de vérification.</p>';
 }
+
+
 function renderTrips() {
   const query = $('#tripSearch').value.trim().toLowerCase();
-  const filtered = state.trips.filter(trip => `${trip.travelerName} ${trip.email} ${trip.departureCity} ${trip.destination}`.toLowerCase().includes(query));
-  $('#tripsBody').innerHTML = filtered.length ? filtered.map(trip => `
-    <tr><td><strong>${escapeHtml(trip.travelerName)}</strong><br><small>${escapeHtml(trip.email)}</small></td>
-    <td>${escapeHtml(trip.departureCity)}</td><td>${escapeHtml(trip.destination)}</td>
-    <td>${dateLabel(trip.departureDate)}</td><td>${badge(trip.status, tripStatusLabel(trip.status))}</td>
-    <td>${badge(trip.boardingStatus || 'pending', boardingLabel(trip.boardingStatus))}</td>
-    <td><button class="action-button" data-edit-trip="${Number(trip.id)}" ${trip.boardingStatus && trip.boardingStatus !== 'pending' ? 'disabled title="Voyage déjà vérifié"' : ''}>Modifier</button></td></tr>
-  `).join('') : '<tr><td colspan="7" class="empty">Aucun voyage trouvé.</td></tr>';
-  const recent = [...state.trips].sort((a,b) => String(b.departureDate).localeCompare(String(a.departureDate))).slice(0, 6);
-  $('#recentTripsBody').innerHTML = recent.length ? recent.map(trip => `
-    <tr><td>${escapeHtml(trip.travelerName)}</td><td>${escapeHtml(trip.departureCity)}</td>
-    <td>${escapeHtml(trip.destination)}</td><td>${dateLabel(trip.departureDate)}</td>
-    <td>${badge(trip.status, tripStatusLabel(trip.status))}</td><td>${badge(trip.boardingStatus || 'pending', boardingLabel(trip.boardingStatus))}</td></tr>
-  `).join('') : '<tr><td colspan="6" class="empty">Aucun voyage enregistré.</td></tr>';
+
+  const filtered = state.trips.filter(trip =>
+    `${trip.travelerName || ''} ${trip.email || ''} ${trip.departureCity || ''} ${trip.destination || ''}`
+      .toLowerCase()
+      .includes(query)
+  );
+
+  // Date locale du navigateur, au format YYYY-MM-DD.
+  const now = new Date();
+  const todayKey = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0')
+  ].join('-');
+
+  $('#tripsBody').innerHTML = filtered.length
+    ? filtered.map(trip => {
+        const id = Number(trip.id);
+        const status = trip.boardingStatus || 'pending';
+        const isCancelled = trip.status === 'cancelled';
+        const departureDay = String(trip.departureDate || '').slice(0, 10);
+        const isFuture = departureDay > todayKey;
+
+        let verificationAction = '';
+
+        if (isCancelled) {
+          verificationAction = `
+            <span class="muted">Voyage annulé</span>
+          `;
+        } else if (status === 'boarded') {
+          verificationAction = `
+            <span class="status-boarded">
+              Embarquement confirmé
+            </span>
+          `;
+        } else if (status === 'not_boarded') {
+          verificationAction = `
+            <span class="status-not_boarded">
+              Non embarqué
+            </span>
+          `;
+        } else {
+          verificationAction = `
+            <button
+              class="btn btn-primary"
+              type="button"
+              data-open-verification="${id}">
+              Confirmer l’embarquement
+            </button>
+
+            ${
+              isFuture
+                ? '<small class="muted">Enregistrement disponible à partir du jour du départ.</small>'
+                : '<small class="muted">Vérification autorisée.</small>'
+            }
+          `;
+        }
+
+        const editAction =
+          status === 'pending' && !isCancelled
+            ? `
+              <button
+                class="action-button"
+                type="button"
+                data-edit-trip="${id}">
+                Modifier
+              </button>
+            `
+            : '';
+
+        return `
+          <tr>
+            <td>
+              <strong>${escapeHtml(trip.travelerName)}</strong><br>
+              <small>${escapeHtml(trip.email)}</small>
+            </td>
+
+            <td>${escapeHtml(trip.departureCity)}</td>
+
+            <td>${escapeHtml(trip.destination)}</td>
+
+            <td>${dateLabel(trip.departureDate)}</td>
+
+            <td>
+              ${badge(trip.status, tripStatusLabel(trip.status))}
+            </td>
+
+            <td>
+              ${badge(status, boardingLabel(status))}
+            </td>
+
+            <td>
+              <div class="trip-actions">
+                ${verificationAction}
+                ${editAction}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('')
+    : `
+      <tr>
+        <td colspan="7" class="empty">Aucun voyage trouvé.</td>
+      </tr>
+    `;
+
+  // Tableau des voyages récents.
+  const recent = [...state.trips]
+    .sort((a, b) =>
+      String(b.departureDate).localeCompare(String(a.departureDate))
+    )
+    .slice(0, 6);
+
+  $('#recentTripsBody').innerHTML = recent.length
+    ? recent.map(trip => `
+        <tr>
+          <td>${escapeHtml(trip.travelerName)}</td>
+          <td>${escapeHtml(trip.departureCity)}</td>
+          <td>${escapeHtml(trip.destination)}</td>
+          <td>${dateLabel(trip.departureDate)}</td>
+          <td>
+            ${badge(trip.status, tripStatusLabel(trip.status))}
+          </td>
+          <td>
+            ${badge(
+              trip.boardingStatus || 'pending',
+              boardingLabel(trip.boardingStatus)
+            )}
+          </td>
+        </tr>
+      `).join('')
+    : `
+      <tr>
+        <td colspan="6" class="empty">Aucun voyage enregistré.</td>
+      </tr>
+    `;
+
+  // Statistiques.
   $('#statTravelers').textContent = state.travelers.length;
   $('#statTrips').textContent = state.trips.length;
-  $('#statConfirmed').textContent = state.trips.filter(t => t.boardingStatus === 'boarded').length;
-  const today = new Date(); today.setHours(0,0,0,0);
-  $('#statUpcoming').textContent = state.trips.filter(t => t.status !== 'cancelled' && new Date(`${String(t.departureDate).slice(0,10)}T00:00:00`) >= today).length;
+
+  $('#statConfirmed').textContent =
+    state.trips.filter(t => t.boardingStatus === 'boarded').length;
+
+  $('#statUpcoming').textContent = state.trips.filter(trip => {
+    const day = String(trip.departureDate || '').slice(0, 10);
+
+    return trip.status !== 'cancelled' && day >= todayKey;
+  }).length;
 }
+
+
 async function loadData() {
   const [travelers, trips, pending] = await Promise.all([
     api('/api/admin/users'),
@@ -249,30 +383,108 @@ function resetTripForm() {
   $('#tripTraveler').disabled = false;
 }
 $('#cancelEdit').addEventListener('click', resetTripForm);
+
 $('#tripsBody').addEventListener('click', event => {
+  const verifyButton = event.target.closest('[data-open-verification]');
+
+  if (verifyButton) {
+    const tripId = Number(verifyButton.dataset.openVerification);
+
+    // Chercher d'abord la fiche existante
+    let card = document.getElementById(`verification-${tripId}`);
+
+    // Si elle n'existe pas, construire la fiche depuis le voyage
+    if (!card) {
+      const trip = state.trips.find(
+        item => Number(item.id) === tripId
+      );
+
+      if (!trip) {
+        showGlobal('Voyage introuvable. Actualisez les données.', true);
+        return;
+      }
+
+      // Ne pas permettre la vérification d'un voyage annulé
+      if (trip.status === 'cancelled') {
+        showGlobal('Un voyage annulé ne peut pas être vérifié.', true);
+        return;
+      }
+
+      const container = $('#pendingVerificationList');
+
+      const empty = container.querySelector('.empty');
+      if (empty) empty.remove();
+
+      const temporaryCard = document.createElement('div');
+      temporaryCard.innerHTML = renderVerificationCard(trip);
+
+      card = temporaryCard.firstElementChild;
+
+      if (!card) {
+        showGlobal('Impossible de créer le formulaire de vérification.', true);
+        return;
+      }
+
+      container.appendChild(card);
+    }
+
+    switchSection('trips');
+
+    card.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+
+    const result = card.querySelector('[name="boardingStatus"]');
+
+    if (result) {
+      result.value = 'boarded';
+      result.focus({ preventScroll: true });
+    }
+
+    return;
+  }
+
+  // Modification du voyage
   const button = event.target.closest('[data-edit-trip]');
+
   if (!button || button.disabled) return;
-  const trip = state.trips.find(item => Number(item.id) === Number(button.dataset.editTrip));
+
+  const trip = state.trips.find(
+    item => Number(item.id) === Number(button.dataset.editTrip)
+  );
+
   if (!trip) return;
+
   const form = $('#tripForm');
+
   form.elements.tripId.value = trip.id;
   form.elements.userId.value = trip.userId;
   form.elements.userId.disabled = true;
-  form.elements.departureDate.value = String(trip.departureDate || '').slice(0,10);
+  form.elements.departureDate.value =
+    String(trip.departureDate || '').slice(0, 10);
   form.elements.departureCity.value = trip.departureCity || '';
   form.elements.destination.value = trip.destination || '';
-  form.elements.arrivalDate.value = String(trip.arrivalDate || '').slice(0,10);
+  form.elements.arrivalDate.value =
+    String(trip.arrivalDate || '').slice(0, 10);
   form.elements.arrivalCity.value = trip.arrivalCity || '';
   form.elements.referenceCode.value = trip.referenceCode || '';
   form.elements.transport.value = trip.transport || '';
   form.elements.notes.value = trip.notes || '';
   form.elements.status.value = trip.status || 'planned';
+
   $('#tripFormTitle').textContent = `Modifier le voyage #${trip.id}`;
   $('#tripSubmit').textContent = 'Enregistrer les modifications';
   $('#cancelEdit').hidden = false;
+
   switchSection('trips');
-  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  form.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start'
+  });
 });
+
 $('#tripForm').addEventListener('submit', async event => {
   event.preventDefault();
   const form = event.currentTarget;

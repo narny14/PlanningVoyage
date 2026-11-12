@@ -789,69 +789,51 @@ app.post('/api/admin/trips', authenticate, requireAdmin, async (req, res) => {
   return res.status(201).json({ id: tripId, notificationId, status: tripStatus, boardingStatus: 'pending', push: delivery });
 });
 
+
 app.get(
-
   '/api/admin/trips/pending-verification',
-
   authenticate,
-
   requireAdmin,
-
   async (req, res) => {
+    try {
+      const [rows] = await pool.execute(
+        `SELECT
+           t.id,
+           t.user_id AS userId,
+           u.full_name AS travelerName,
+           u.email,
+           t.departure_date AS departureDate,
+           t.departure_city AS departureCity,
+           t.destination,
+           t.arrival_date AS arrivalDate,
+           t.arrival_city AS arrivalCity,
+           t.reference_code AS referenceCode,
+           t.transport,
+           t.status,
+           v.boarding_status AS boardingStatus
+         FROM trips t
+         INNER JOIN users u ON u.id = t.user_id
+         INNER JOIN trip_verifications v ON v.trip_id = t.id
+         WHERE t.departure_date <= CURDATE()
+           AND t.status <> 'cancelled'
+           AND v.boarding_status = 'pending'
+         ORDER BY t.departure_date DESC, t.id DESC`
+      );
 
-    const [rows] = await pool.execute(
+      return res.json(rows);
+    } catch (error) {
+      console.error(
+        'GET /api/admin/trips/pending-verification error:',
+        error
+      );
 
-      `SELECT
-
-         t.id,
-
-         t.user_id AS userId,
-
-         u.full_name AS travelerName,
-
-         u.email,
-
-         t.departure_date AS departureDate,
-
-         t.departure_city AS departureCity,
-
-         t.destination,
-
-         t.arrival_date AS arrivalDate,
-
-         t.arrival_city AS arrivalCity,
-
-         t.reference_code AS referenceCode,
-
-         t.transport,
-
-         t.status,
-
-         v.boarding_status AS boardingStatus
-
-       FROM trips t
-
-       INNER JOIN users u ON u.id = t.user_id
-
-       INNER JOIN trip_verifications v ON v.trip_id = t.id
-
-       WHERE t.departure_date < CURDATE()
-
-         AND t.status <> 'cancelled'
-
-         AND v.boarding_status = 'pending'
-
-       ORDER BY t.departure_date DESC`
-
-    );
-
-
-
-    res.json(rows);
-
+      return res.status(500).json({
+        message: 'Impossible de récupérer les voyages en attente de vérification.'
+      });
+    }
   }
-
 );
+
 
 app.post(
 
@@ -1067,25 +1049,24 @@ app.post(
 
 
 
-      const [todayRows] = await connection.query(
+      
+const [todayRows] = await connection.query(
+  'SELECT CURDATE() AS today'
+);
 
-        'SELECT CURDATE() AS today'
+const departureDay = String(trip.departure_date).slice(0, 10);
+const today = String(todayRows[0].today).slice(0, 10);
 
-      );
+// Refuser uniquement les voyages dont la date est dans le futur.
+// Le JOUR-J et les jours précédents sont autorisés.
+if (departureDay > today) {
+  await connection.rollback();
 
+  return res.status(409).json({
+    message: 'La vérification est autorisée à partir du jour du départ.'
+  });
+}
 
-
-      if (String(trip.departure_date) >= String(todayRows[0].today)) {
-
-        await connection.rollback();
-
-        return res.status(409).json({
-
-          message: 'La date de départ n’est pas encore passée.'
-
-        });
-
-      }
 
 
 
